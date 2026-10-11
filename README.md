@@ -22,9 +22,9 @@ Download an **x86-64 binary package** for your distribution from [GitHub Release
 
 Package filenames follow `phono-fcitx5-addon-<arch>-<version>-<platform>.<ext>`, for example `phono-fcitx5-addon-x86_64-0.1.0-fedora43.rpm`. Actions artifacts use the same name without an extension; replace `<version>` with the actual version.
 
-在解压后的目录运行对应命令。即使扩展名相同，也应选择为当前发行版构建的包。安装包包含推理库，模型需单独下载。
+在下载目录运行对应命令。即使扩展名相同，也应选择为当前发行版构建的包。安装包包含私有的 phono-core 运行库及许可证，模型需单独下载；Release 的下载指引和各发行版来源报告记录所用 core 版本。
 
-Run the corresponding command in the extracted directory. Choose the package built for your distribution, even when another package has the same extension. The inference library is included; download the model separately.
+Run the corresponding command in the download directory. Choose the package built for your distribution, even when another package has the same extension. Packages include a private phono-core runtime and its licenses; download the model separately. The Release download guide and distribution provenance reports identify the core version used.
 
 ### 下载模型并启用 / Download a model and enable Phono
 
@@ -53,6 +53,10 @@ Run the corresponding command in the extracted directory. Choose the package bui
 模型未配置、被禁用或加载失败时，仍可使用词典候选。配置在 Fcitx5 中保存后生效，无需修改模型包内的 `config.json`。
 
 Dictionary candidates remain available when the model is unconfigured, disabled, or fails to load. Save settings in Fcitx5 to apply them; you do not need to edit the model package’s `config.json`.
+
+Phono 配置通常保存在 `~/.config/fcitx5/conf/phono.conf`，用户词典和历史在 `~/.local/share/fcitx5/phono/`；设置了 `XDG_CONFIG_HOME` 或 `XDG_DATA_HOME` 时使用对应目录。模型目录由用户选择，不属于这些配置目录，也不会随安装包更新。
+
+Phono settings normally live in `~/.config/fcitx5/conf/phono.conf`, with the user dictionary and history under `~/.local/share/fcitx5/phono/`. `XDG_CONFIG_HOME` and `XDG_DATA_HOME` override these locations. The model directory is selected by the user, is separate from these settings, and is not replaced by package updates.
 
 ## 使用 / Usage
 
@@ -113,9 +117,9 @@ Restart Fcitx5 after removal. Models, personal settings, and the user dictionary
 
 ## 开发 / Development
 
-本地构建需要 Linux、Pixi ≥ 0.81、支持 C++20 的宿主编译器、与宿主匹配的 Fcitx5 ≥ 5.1.7 / libime ≥ 1.1.5 开发包，以及 Fcitx5 标点、全角模块。还需准备 phono-core 的 C ABI 头文件与共享库；默认从相邻的 `../phono-core/interface` 和 `../phono-core/results/libphono_core.so` 查找。
+本地构建需要 Linux、Pixi ≥ 0.81、支持 C++20 的宿主编译器、与宿主匹配的 Fcitx5 ≥ 5.1.7 / libime ≥ 1.1.5 开发包，以及 Fcitx5 标点、全角模块。本仓库独立构建，使用 `ci/core-sdk.json` 固定的 phono-core Release SDK，不需要 core 源码或相邻仓库。
 
-Local builds require Linux, Pixi ≥ 0.81, a host compiler with C++20 support, Fcitx5 ≥ 5.1.7 / libime ≥ 1.1.5 development packages matching the host, and the Fcitx5 punctuation and full-width modules. Supply the phono-core C ABI headers and shared library; the defaults are the adjacent `../phono-core/interface` and `../phono-core/results/libphono_core.so`.
+Local builds require Linux, Pixi ≥ 0.81, a host compiler with C++20 support, Fcitx5 ≥ 5.1.7 / libime ≥ 1.1.5 development packages matching the host, and the Fcitx5 punctuation and full-width modules. This repository builds independently against the phono-core Release SDK pinned in `ci/core-sdk.json`, without core sources or adjacent repositories.
 
 在本项目目录执行：
 
@@ -123,18 +127,19 @@ Run these commands in this project’s directory:
 
 ```sh
 pixi install --locked
+pixi run fetch-core
 pixi run test
-# 使用真实模型验证推理与动态加载 / Test inference and dynamic loading with a real model
+# 使用显式模型目录验证推理 / Test inference with an explicit model directory
 PHONO_TEST_MODEL_DIR=/absolute/path/to/model pixi run test
 ```
 
-测试的配置和用户词典写入构建目录内的隔离环境。自定义核心路径可通过 `pixi run python tools/configure.py -DPHONO_CORE_INCLUDE_DIR=/path/to/include -DPHONO_CORE_LIBRARY=/path/to/libphono_core.so` 指定。
+SDK 下载到 `.sdk/phono-core`，下载程序校验固定 Release 的校验和，并记录版本、资产名称与实际 SHA-256。测试的配置和用户词典写入构建目录内的隔离环境，日常测试无需模型。使用其他已安装 SDK 时可执行 `PHONO_SDK_PREFIX=/absolute/path/to/sdk pixi run test`；直接调用 CMake 时使用 `-DPHONO_SDK_PREFIX=...` 或 `CMAKE_PREFIX_PATH`。
 
-Tests write settings and user dictionaries to isolated environments inside the build directory. To use a different core location, run `pixi run python tools/configure.py -DPHONO_CORE_INCLUDE_DIR=/path/to/include -DPHONO_CORE_LIBRARY=/path/to/libphono_core.so`.
+The SDK is downloaded to `.sdk/phono-core`. The downloader verifies the pinned Release checksum and records the version, asset name, and actual SHA-256. Tests write settings and user dictionaries to isolated environments inside the build directory; routine tests need no model. To use another installed SDK, run `PHONO_SDK_PREFIX=/absolute/path/to/sdk pixi run test`. Direct CMake builds accept `-DPHONO_SDK_PREFIX=...` or `CMAKE_PREFIX_PATH`.
 
-二进制包构建与安装验证见 [CI 文档](docs/zh-cn/ci.md)。
+显式本地覆盖仍支持 `PHONO_CORE_INCLUDE_DIR`、`PHONO_CORE_LIBRARY` 和打包所需的 `PHONO_CORE_LICENSE_ROOT`，通过 `tools/configure.py` 的 `-D` 参数传入。二进制包构建、Release 规则和安装验证见 [CI 文档](docs/ci.md)。贡献代码前请运行适合改动的测试；涉及发行版打包时，可手动运行完整矩阵。
 
-See the [CI documentation](docs/en-us/ci.md) for binary package builds and installation checks.
+Explicit local overrides still accept `PHONO_CORE_INCLUDE_DIR`, `PHONO_CORE_LIBRARY`, and `PHONO_CORE_LICENSE_ROOT` for packaging, passed as `-D` arguments to `tools/configure.py`. See the [CI documentation](docs/ci.md) for package builds, Release rules, and installation checks. Run tests relevant to your contribution; packaging changes can be checked with a manual full-matrix run.
 
 ## 许可证 / License
 
