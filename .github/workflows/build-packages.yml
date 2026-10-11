@@ -1,123 +1,98 @@
-name: Build downloadable Linux packages
+name: Check and deliver Linux packages
 
 on:
+  pull_request:
   workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: Validate all five distributions
+        type: boolean
+        default: false
   release:
     types: [published]
-  pull_request:
 
 permissions:
   contents: read
 
 concurrency:
   group: packages-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: ${{ github.event_name != 'release' }}
 
 jobs:
-  core:
+  metadata:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
     outputs:
       version: ${{ steps.metadata.outputs.version }}
+      matrix: ${{ steps.metadata.outputs.matrix }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+          fetch-depth: 0
           ref: ${{ github.event.release.tag_name || github.ref }}
-      - name: Record source time and validate release version
+      - name: Validate version and select targets
         id: metadata
-        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          FULL_MATRIX: ${{ inputs.full_matrix }}
         run: |
-          printf 'SOURCE_DATE_EPOCH=%s\n' "$(git show -s --format=%ct HEAD)" >> "$GITHUB_ENV"
-          version=$(sed -n 's/.*project(.*VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
-          if test "$GITHUB_REF_TYPE" = tag; then
-            test "$GITHUB_REF_NAME" = "v$version"
+          args=()
+          if test -n "$RELEASE_TAG"; then
+            args+=(--tag "$RELEASE_TAG" --default-branch "$DEFAULT_BRANCH")
           fi
-      - name: Download and verify the fixed core Release SDK
-        run: python3 tools/fetch_core_sdk.py --prefix "$GITHUB_WORKSPACE/build/ci/core-prefix"
-      - name: Preserve core ABI, licenses and provenance as one artifact
-        run: |
-          tar -C "$GITHUB_WORKSPACE/build/ci/core-prefix" -czf "${GITHUB_WORKSPACE}/build/ci/core-prefix.tar.gz" .
-          sha256sum "${GITHUB_WORKSPACE}/build/ci/core-prefix.tar.gz" > "${GITHUB_WORKSPACE}/build/ci/core-prefix.tar.gz.sha256"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: phono-core-prefix
-          path: |
-            build/ci/core-prefix.tar.gz
-            build/ci/core-prefix.tar.gz.sha256
-          if-no-files-found: error
+          if test "$FULL_MATRIX" = true; then args+=(--full); fi
+          python3 tools/ci_metadata.py "${args[@]}"
 
   packages:
-    needs: core
+    needs: metadata
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - target: debian13
-            image: debian:13
-            max_glibc: '2.41'
-          - target: ubuntu2404
-            image: ubuntu:24.04
-            max_glibc: '2.39'
-          - target: fedora43
-            image: fedora:43
-            max_glibc: '2.42'
-          - target: opensuse-tumbleweed
-            image: registry.opensuse.org/opensuse/tumbleweed:latest
-            max_glibc: native
-          - target: arch
-            image: archlinux:base
-            max_glibc: native
+      matrix: ${{ fromJSON(needs.metadata.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
           ref: ${{ github.event.release.tag_name || github.ref }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: phono-core-prefix
-          path: build/ci/downloads
-      - name: Check and unpack the core artifact
-        shell: bash
-        run: |
-          cd build/ci/downloads
-          # Normalize the checksum filename created in the upstream job.
-          checksum=$(cut -d ' ' -f1 core-prefix.tar.gz.sha256)
-          printf '%s  core-prefix.tar.gz\n' "$checksum" | sha256sum --check
-          mkdir -p ../core-prefix
-          tar -xf core-prefix.tar.gz -C ../core-prefix
+      - name: Download and verify the fixed core Release SDK
+        run: python3 tools/fetch_core_sdk.py --prefix "$GITHUB_WORKSPACE/.sdk/phono-core"
+      - name: Fetch the fixed release inference model
+        if: github.event_name == 'release' && matrix.target == 'ubuntu2404'
+        run: python3 tools/fetch_model.py --output "$GITHUB_WORKSPACE/.cache/models/release"
       - name: Build and test in the target distribution
-        shell: bash
         env:
           TARGET: ${{ matrix.target }}
           IMAGE: ${{ matrix.image }}
           MAX_GLIBC: ${{ matrix.max_glibc }}
+          REQUIRE_MODEL: ${{ github.event_name == 'release' && matrix.target == 'ubuntu2404' }}
         run: |
-          # Versioned stable tags and rolling distribution tags are resolved to
-          # immutable digests here and recorded with the downloadable artifacts.
           docker pull "$IMAGE"
-          digest=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
+          image_id=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           docker run --rm --platform linux/amd64 \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
-            -e TARGET -e MAX_GLIBC -e "CONTAINER_DIGEST=$digest" \
+            -e TARGET -e MAX_GLIBC -e REQUIRE_MODEL -e "CONTAINER_DIGEST=$image_id" \
             -e "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" \
-            "$digest" bash -euc '
+            "$image_id" bash -euc '
               bash ci/install-native-deps.sh "$TARGET"
+              args=()
+              if test "$REQUIRE_MODEL" = true; then
+                args+=(--require-model --model-dir /workspace/.cache/models/release)
+              fi
               python3 tools/ci_build_packages.py --target "$TARGET" \
-                --core-prefix /workspace/build/ci/core-prefix --max-glibc "$MAX_GLIBC" \
-                --output "/workspace/dist/$TARGET"
+                --core-prefix /workspace/.sdk/phono-core --max-glibc "$MAX_GLIBC" \
+                --output "/workspace/dist/$TARGET" "${args[@]}"
+              python3 tools/ci_metadata.py --notes "/workspace/dist/$TARGET/download-guide.md"
             '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: phono-fcitx5-addon-x86_64-${{ needs.core.outputs.version }}-${{ matrix.target }}
+          name: phono-fcitx5-addon-x86_64-${{ needs.metadata.outputs.version }}-${{ matrix.target }}
           path: dist/${{ matrix.target }}/*
           if-no-files-found: error
 
-  release:
-    if: github.event_name == 'release' && github.event.action == 'published'
+  upload:
+    if: github.event_name == 'release'
     needs: packages
     runs-on: ubuntu-24.04
     permissions:
@@ -128,10 +103,13 @@ jobs:
           pattern: phono-fcitx5-addon-x86_64-*
           merge-multiple: true
           path: dist
-      - name: Upload tested binaries to the published release
+      - name: Upload tested packages and add installation instructions
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release view "$RELEASE_TAG" --json body --jq .body > release-notes.md
+          cat dist/download-guide.md >> release-notes.md
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md

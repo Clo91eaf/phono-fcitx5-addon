@@ -66,7 +66,17 @@ def main() -> None:
     parser.add_argument("--max-glibc", required=True, help="Target release limit, or native for rolling targets")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--jobs", type=int, default=4)
+    parser.add_argument("--model-dir", type=Path, help="Explicit fixed-model path for release inference")
+    parser.add_argument("--require-model", action="store_true")
     args = parser.parse_args()
+    if args.require_model and args.model_dir is None:
+        raise ValueError("Release inference requires --model-dir")
+    if args.model_dir is not None:
+        from fetch_model import FILES
+        args.model_dir = args.model_dir.resolve(strict=True)
+        for name in FILES:
+            if not (args.model_dir / name).is_file() or (args.model_dir / name).stat().st_size == 0:
+                raise ValueError(f"Release model is missing {name}")
     prefix = args.core_prefix.resolve()
     core = prefix / "lib/libphono_core.so"
     header = prefix / "include/phono-core/phono_api.h"
@@ -99,7 +109,12 @@ def main() -> None:
          f"-DPHONO_SDK_PREFIX={prefix}",
          f"-DPHONO_CORE_LICENSE_ROOT={licenses}", "-DBUILD_TESTING=ON"])
     run(["cmake", "--build", build, "--parallel", str(args.jobs)])
-    run(["ctest", "--test-dir", build, "--output-on-failure"])
+    test_env = os.environ.copy()
+    test_env.pop("PHONO_TEST_MODEL_DIR", None)
+    run(["ctest", "--test-dir", build, "--output-on-failure"], env=test_env)
+    if args.model_dir is not None:
+        test_env["PHONO_TEST_MODEL_DIR"] = str(args.model_dir)
+        run(["ctest", "--test-dir", build, "--output-on-failure", "-R", "^load_tests$"], env=test_env)
     environment = os.environ.copy()
     environment["DESTDIR"] = str(package_root)
     run(["cmake", "--install", build], env=environment)
@@ -117,6 +132,7 @@ def main() -> None:
     # does not need a separately installed core package or LD_LIBRARY_PATH.
     addon_dir = addon.parent
     loader_env = os.environ.copy()
+    loader_env.pop("PHONO_TEST_MODEL_DIR", None)
     loader_env.pop("LD_LIBRARY_PATH", None)
     loader_env["XDG_CONFIG_HOME"] = str(build / "installed-loader/config")
     loader_env["XDG_DATA_HOME"] = str(build / "installed-loader/data")
@@ -180,6 +196,9 @@ def main() -> None:
     installed_env["FCITX_DATA_DIRS"] = "/usr/share/fcitx5"
     installed_env["FCITX_ADDON_DIRS"] = f"/{addon_dir.relative_to(package_root)}"
     run([build / "load_tests"], env=installed_env)
+    if args.model_dir is not None:
+        installed_env["PHONO_TEST_MODEL_DIR"] = str(args.model_dir)
+        run([build / "load_tests"], env=installed_env)
     core_info = json.loads((prefix / "core-sdk.json").read_text())
     (output / f"{args.target}-core-sdk.json").write_text(json.dumps(core_info, indent=2) + "\n")
     metadata = {
