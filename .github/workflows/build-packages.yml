@@ -59,14 +59,14 @@ jobs:
       - name: Download and verify the fixed core Release SDK
         run: python3 tools/fetch_core_sdk.py --prefix "$GITHUB_WORKSPACE/.sdk/phono-core"
       - name: Fetch the fixed release inference model
-        if: github.event_name == 'release' && matrix.target == 'ubuntu2404'
+        if: (github.event_name == 'release' || inputs.full_matrix) && matrix.target == 'ubuntu2404'
         run: python3 tools/fetch_model.py --output "$GITHUB_WORKSPACE/.cache/models/release"
       - name: Build and test in the target distribution
         env:
           TARGET: ${{ matrix.target }}
           IMAGE: ${{ matrix.image }}
           MAX_GLIBC: ${{ matrix.max_glibc }}
-          REQUIRE_MODEL: ${{ github.event_name == 'release' && matrix.target == 'ubuntu2404' }}
+          REQUIRE_MODEL: ${{ (github.event_name == 'release' || inputs.full_matrix) && matrix.target == 'ubuntu2404' }}
         run: |
           docker pull "$IMAGE"
           image_id=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')

@@ -8,9 +8,9 @@ This repository builds and delivers the Fcitx5 addon. [phono-core](https://githu
 
 ## 执行路径 / Execution paths
 
-PR 默认仅验证 Ubuntu 24.04，包括 CTest、词典回退、安装布局、ELF 需求及实际原生包加载。手动入口默认运行同一目标；修改打包逻辑时，将 `full_matrix` 设为 `true` 可验证全部目标。Release 则运行完整五发行版矩阵，并在 Ubuntu 上验证固定模型的加载和真实推理，缺失模型使该发布检查失败。
+PR 默认仅验证 Ubuntu 24.04，包括 CTest、词典回退、安装布局、ELF 需求及实际原生包加载。手动入口默认运行同一目标；将 `full_matrix` 设为 `true` 可运行完整五发行版矩阵，并在 Ubuntu 上验证固定模型的加载和真实推理，复现 Release 检查。Release 自动执行这些完整检查，缺失模型使推理检查失败。
 
-Pull requests validate Ubuntu 24.04 by default, including CTest, dictionary fallback, installation layout, ELF requirements, and actual native-package loading. Manual runs use the same target by default; set `full_matrix` to `true` to check every target after packaging changes. Releases run the complete five-distribution matrix and additionally test fixed-model loading and real inference on Ubuntu. Missing models fail that release check.
+Pull requests validate Ubuntu 24.04 by default, including CTest, dictionary fallback, installation layout, ELF requirements, and actual native-package loading. Manual runs use the same target by default. Set `full_matrix` to `true` to reproduce Release checks: the full five-distribution matrix and fixed-model loading and real inference on Ubuntu. Releases run these complete checks automatically. Missing models fail the inference check.
 
 | 发行版 / Distribution | 目标 / Target | 原生包 / Native package | addon glibc 上限 / Addon glibc limit |
 | --- | --- | --- | --- |
