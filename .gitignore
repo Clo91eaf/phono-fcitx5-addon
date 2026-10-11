@@ -2,6 +2,7 @@
 /.pixi/
 /ci/.pixi/
 /.sdk/
+/.cache/
 
 # Build, staging and downloadable binaries
 /build*/

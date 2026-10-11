@@ -13,34 +13,15 @@ install(FILES "${PROJECT_SOURCE_DIR}/README.md"
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/docs/" DESTINATION "${CMAKE_INSTALL_DOCDIR}/docs"
     FILES_MATCHING PATTERN "*.md")
 if(PHONO_BUNDLE_CORE)
-    set(PHONO_CORE_LICENSE_ROOT "${PHONO_CORE_ROOT}" CACHE PATH
-        "Core source/license tree used for bundled redistribution notices")
+    set(PHONO_CORE_LICENSE_ROOT "" CACHE PATH
+        "Core SDK license tree used for bundled redistribution notices")
     set(PHONO_CORE_EXTRA_LICENSE_FILES "" CACHE STRING
         "Additional semicolon-separated license/notice files for bundled core dependencies")
-    # Preserve each origin directory: most dependencies name their file LICENSE,
-    # and flattening them would silently overwrite different copyright notices.
-    foreach(_phono_notice
-        LICENSE
-        third_party/executorch/LICENSE
-        third_party/executorch/backends/xnnpack/third-party/XNNPACK/LICENSE
-        third_party/executorch/backends/xnnpack/third-party/pthreadpool/LICENSE
-        third_party/executorch/backends/xnnpack/third-party/cpuinfo/LICENSE
-        third_party/executorch/backends/xnnpack/third-party/FP16/LICENSE
-        third_party/executorch/backends/xnnpack/third-party/FXdiv/LICENSE
-        third_party/executorch/third-party/flatbuffers/LICENSE
-        third_party/executorch/third-party/flatcc/LICENSE
-        third_party/executorch/third-party/gflags/COPYING.txt
-        third_party/executorch/third-party/json/LICENSE.MIT
-        third_party/uni-algo/LICENSE.md)
-        if(EXISTS "${PHONO_CORE_LICENSE_ROOT}/${_phono_notice}")
-            get_filename_component(_phono_notice_dir "${_phono_notice}" DIRECTORY)
-            install(FILES "${PHONO_CORE_LICENSE_ROOT}/${_phono_notice}"
-                DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${PROJECT_NAME}/phono-core/${_phono_notice_dir}")
-        endif()
-    endforeach()
     if(NOT EXISTS "${PHONO_CORE_LICENSE_ROOT}/LICENSE")
-        message(WARNING "Bundled redistribution needs PHONO_CORE_LICENSE_ROOT with the core LICENSE and dependency notices")
+        message(FATAL_ERROR "Bundled redistribution requires PHONO_CORE_LICENSE_ROOT with the SDK LICENSE and dependency notices")
     endif()
+    install(DIRECTORY "${PHONO_CORE_LICENSE_ROOT}/"
+        DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/${PROJECT_NAME}/phono-core")
     set(_phono_extra_notice_index 0)
     foreach(_phono_notice IN LISTS PHONO_CORE_EXTRA_LICENSE_FILES)
         get_filename_component(_phono_notice_name "${_phono_notice}" NAME)

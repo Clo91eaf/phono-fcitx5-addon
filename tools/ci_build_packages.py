@@ -95,8 +95,8 @@ def main() -> None:
         cpp_limits[namespace] = max(found, key=version_tuple)
     run(["cmake", "-S", ROOT, "-B", build, "-G", "Ninja",
          "-DCMAKE_TOOLCHAIN_FILE=", "-DCMAKE_BUILD_TYPE=Release",
-         "-DCMAKE_INSTALL_PREFIX=/usr", "-DPHONO_BUNDLE_CORE=ON", "-DPHONO_CORE_ROOT=",
-         f"-DPHONO_CORE_INCLUDE_DIR={header.parent}", f"-DPHONO_CORE_LIBRARY={core}",
+         "-DCMAKE_INSTALL_PREFIX=/usr", "-DPHONO_BUNDLE_CORE=ON",
+         f"-DPHONO_SDK_PREFIX={prefix}",
          f"-DPHONO_CORE_LICENSE_ROOT={licenses}", "-DBUILD_TESTING=ON"])
     run(["cmake", "--build", build, "--parallel", str(args.jobs)])
     run(["ctest", "--test-dir", build, "--output-on-failure"])
@@ -107,14 +107,10 @@ def main() -> None:
          "--bundled-core", "--require-shuangpin"])
     addon = next(package_root.glob("usr/**/fcitx5/libphono.so"))
     reports = []
-    for binary, limits in (
-        (addon, (max_glibc, cpp_limits["GLIBCXX"], cpp_limits["CXXABI"])),
-        (core, ("2.28", "3.4.31", "1.3.14")),
-    ):
-        flags = ["--no-rpath", "--c-api-only"] if binary == core else []
+    for binary, limits in ((addon, (max_glibc, cpp_limits["GLIBCXX"], cpp_limits["CXXABI"])),):
         result = run([sys.executable, ROOT / "tools/check_elf.py", binary,
                       "--max-glibc", limits[0], "--max-glibcxx", limits[1],
-                      "--max-cxxabi", limits[2], *flags], capture_output=True)
+                      "--max-cxxabi", limits[2]], capture_output=True)
         reports.append(f"{binary.name}\n{result.stdout}\n")
     (output / f"{args.target}-elf-baseline.txt").write_text("\n".join(reports))
     # Exercise the installed DSO, including its private-core RUNPATH. The user
@@ -184,15 +180,15 @@ def main() -> None:
     installed_env["FCITX_DATA_DIRS"] = "/usr/share/fcitx5"
     installed_env["FCITX_ADDON_DIRS"] = f"/{addon_dir.relative_to(package_root)}"
     run([build / "load_tests"], env=installed_env)
-    core_info = json.loads((prefix / "share/phono-core/build-info.json").read_text())
-    (output / f"{args.target}-core-build.json").write_text(json.dumps(core_info, indent=2) + "\n")
+    core_info = json.loads((prefix / "core-sdk.json").read_text())
+    (output / f"{args.target}-core-sdk.json").write_text(json.dumps(core_info, indent=2) + "\n")
     metadata = {
         "target": args.target, "version": project_version,
         "architecture": "x86_64", "container_digest": os.environ.get("CONTAINER_DIGEST", "local"),
         "native_glibc": host_glibc, "addon_glibc_gate": max_glibc,
-        "native_cpp_runtime": cpp_limits, "core_glibc_gate": "2.28",
-        "core_revision": json.loads((ROOT / "ci/core-source.json").read_text())["revision"],
-        "core_sha256": hashlib.sha256(core.read_bytes()).hexdigest(),
+        "native_cpp_runtime": cpp_limits,
+        "core_version": core_info["version"], "core_asset": core_info["asset"],
+        "core_sha256": core_info["sha256"],
     }
     (output / f"{args.target}-build.json").write_text(json.dumps(metadata, indent=2) + "\n")
     checksums = []

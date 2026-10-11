@@ -17,6 +17,7 @@ gettext = ">=0.22,<1"
 
 # Use the host compiler so the addon matches the native Fcitx/libime ABI.
 [tasks]
+fetch-core = "python tools/fetch_core_sdk.py"
 config = "python tools/configure.py"
 build = { cmd = "cmake --build build/pixi", depends-on = ["config"] }
 test = { cmd = "ctest --test-dir build/pixi --output-on-failure", depends-on = ["build"] }
