@@ -16,6 +16,8 @@ import subprocess
 import sys
 import tarfile
 
+from ci_metadata import version
+
 
 ROOT = Path(__file__).resolve().parents[1]
 TARGETS = {
@@ -84,8 +86,7 @@ def main() -> None:
     for required in (core, header, licenses / "LICENSE"):
         if not required.is_file():
             raise ValueError(f"Core artifact contract is missing {required}")
-    project_version = re.search(r"\bVERSION\s+([0-9]+(?:\.[0-9]+)+)",
-                                (ROOT / "CMakeLists.txt").read_text()).group(1)
+    project_version = version()
     package_name = f"phono-fcitx5-addon-x86_64-{project_version}-{args.target}"
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
