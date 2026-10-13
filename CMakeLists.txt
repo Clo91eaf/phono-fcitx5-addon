@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(phono-fcitx5-addon VERSION 0.1.0 LANGUAGES CXX)
+project(phono-fcitx5-addon VERSION 0.1.1 LANGUAGES CXX)
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     message(FATAL_ERROR "This addon currently targets Linux Fcitx5")
 endif()
