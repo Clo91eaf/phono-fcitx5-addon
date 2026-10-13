@@ -18,6 +18,9 @@ msgstr ""
 msgid "Enable Phono model"
 msgstr "啟用 Phono 模型"
 
+msgid "Use unigram probabilities for a single syllable without context"
+msgstr "無上下文單字使用一元詞機率"
+
 msgid "Model package directory"
 msgstr "模型套件目錄"
 

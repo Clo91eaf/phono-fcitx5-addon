@@ -37,6 +37,7 @@ struct State : fcitx::InputContextProperty {
         cancelled.reset();
         ++generation;
         beams.clear();
+        unigramIndices.clear();
         invalid.clear();
         error.clear();
         lastUpdate.reset();
@@ -47,6 +48,7 @@ struct State : fcitx::InputContextProperty {
     bool splitting = false;
     Cancellation cancelled;
     std::vector<std::string> beams;
+    std::vector<size_t> unigramIndices;
     std::vector<InvalidInput> invalid;
     std::string error;
     std::string localHistory;
@@ -80,6 +82,7 @@ public:
     State *state(fcitx::InputContext *ic);
 private:
     void update(fcitx::InputContext *, bool infer);
+    void rankUnigram(State *);
     void render(fcitx::InputContext *);
     void commit(fcitx::InputContext *, const std::string &, bool learn);
     bool punctuation(fcitx::InputContext *, const fcitx::Key &);

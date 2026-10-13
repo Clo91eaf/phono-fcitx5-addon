@@ -7,9 +7,11 @@
 #include <fcitx/inputpanel.h>
 #include <fcitx/candidatelist.h>
 #include <fcitx/addonmanager.h>
+#include <libime/core/languagemodel.h>
 #include <deque>
 #include <algorithm>
 #include <iostream>
+#include <limits>
 using namespace fcitx;
 using namespace phono_fcitx;
 class Context : public InputContext {
@@ -45,6 +47,7 @@ int main() {
         RawConfig config;
         config.setValueByPath("Enabled", "True");
         config.setValueByPath("ModelDirectory", "/test/model");
+        config.setValueByPath("PreferUnigramSingleSyllable", "True");
         engine.setConfig(config);
         auto key = [&](KeySym sym, KeyStates states = KeyStates{}) {
             KeyEvent event(&ic, Key(sym, states), false);
@@ -60,6 +63,100 @@ int main() {
         size_t splitIndex = 0;
         size_t before = 0;
         size_t typedPreeditUpdates = 0;
+        std::string unigramCommit;
+        steps.push_back([&] {
+            ic.surroundingText().setText("", 0, 0);
+            type("ma");
+            const auto *s = engine.state(&ic);
+            CHECK(!s->unigramIndices.empty());
+            CHECK(!s->cancelled && s->beams.empty());
+            // Compare the displayed order with independent static unigram scores.
+            libime::LanguageModel lm(libime::DefaultLanguageModelResolver::instance().languageModelFileForLanguage("zh_CN"));
+            float previous = std::numeric_limits<float>::infinity();
+            const auto &classic = s->pinyin.candidatesToCursor();
+            for (const auto index : s->unigramIndices) {
+                const auto text = classic[index].toString();
+                CHECK(s->pinyin.candidateFullPinyin(classic[index]) == "ma");
+                const auto score = lm.singleWordScore(text);
+                CHECK(score <= previous);
+                previous = score;
+            }
+            auto list = ic.inputPanel().candidateList();
+            CHECK(list->candidate(0).text().toString() == classic[s->unigramIndices.front()].toString());
+            unigramCommit = list->candidate(1).text().toString();
+            // Reordered dictionary candidates still select their original libime index.
+            CHECK(key(FcitxKey_2));
+            CHECK(ic.committed == unigramCommit);
+            CHECK(engine.state(&ic)->pinyin.empty());
+            type("ma");
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            { std::lock_guard lock(mutex); CHECK(requests.back().history == unigramCommit); }
+            reset();
+            ic.surroundingText().setText("甲", 1, 1);
+            type("ma");
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            { std::lock_guard lock(mutex); CHECK(requests.back().history == "甲"); }
+            reset();
+            ic.surroundingText().setText("", 0, 0);
+            config.setValueByPath("PreferUnigramSingleSyllable", "False");
+            engine.setConfig(config);
+            type("ma");
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            { std::lock_guard lock(mutex); CHECK(requests.back().history.empty()); }
+            reset();
+            config.setValueByPath("PreferUnigramSingleSyllable", "True");
+            engine.setConfig(config);
+            engine.state(&ic)->pinyin.setUseShuangpin(true);
+            type("ma");
+            CHECK(!engine.state(&ic)->unigramIndices.empty());
+            CHECK(!engine.state(&ic)->cancelled && engine.state(&ic)->beams.empty());
+            reset();
+            type("mama");
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            { std::lock_guard lock(mutex); CHECK(requests.back().syllables.size() == 2); }
+            reset();
+            type("ib");
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            { std::lock_guard lock(mutex); CHECK(!requests.back().invalid.empty()); }
+            reset();
+            engine.state(&ic)->pinyin.setUseShuangpin(false);
+            type("n");
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            reset();
+            type("nihao");
+            CHECK(engine.state(&ic)->unigramIndices.empty());
+            return true;
+        });
+        steps.push_back([&] {
+            if (!hasBeams()) return false;
+            reset();
+            ic.committed.clear();
+            return true;
+        });
         steps.push_back([&] {
             // Surrounding indices are characters, including emoji and CJK.
             ic.surroundingText().setText("甲😀乙选中尾", 5, 3);
@@ -156,6 +253,9 @@ int main() {
             if (!hasBeams()) return false;
             { std::lock_guard lock(mutex); CHECK(requests.back().history == "模型甲"); }
             reset();
+            // This case specifically exercises model/dictionary deduplication.
+            config.setValueByPath("PreferUnigramSingleSyllable", "False");
+            engine.setConfig(config);
             type("ma");
             return true;
         });
@@ -236,6 +336,7 @@ int main() {
         if (!failure.empty()) throw std::runtime_error(failure);
         // Native decimal parameters reject invalid text before it reaches JSON.
         Config native;
+        CHECK(*native.preferUnigram);
         RawConfig invalid; invalid.setValueByPath("TrialRatio", "nan"); native.load(invalid, true);
         CHECK(*native.trialRatio == "0.25");
         CHECK(!nlohmann::json::parse(settingsFor(native).contextJson).contains("beam_size"));

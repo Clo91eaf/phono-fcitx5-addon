@@ -31,6 +31,7 @@ struct DecimalConstrain {
 FCITX_CONFIGURATION(
     Config,
     fcitx::Option<bool> enabled{this, "Enabled", _("Enable Phono model"), true};
+    fcitx::Option<bool> preferUnigram{this, "PreferUnigramSingleSyllable", _("Use unigram probabilities for a single syllable without context"), true};
     fcitx::Option<std::string> model{this, "ModelDirectory", _("Model package directory"), ""};
     fcitx::Option<int, fcitx::IntConstrain> pageSize{this, "PageSize", _("Candidates per page"), 7, {3, 10}};
     fcitx::Option<int, fcitx::IntConstrain> contextSlots{this, "ContextSlots", _("Context cache slots"), 4, {1, 32}};

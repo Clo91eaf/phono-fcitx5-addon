@@ -27,6 +27,7 @@
 #include <libime/core/languagemodel.h>
 #include <libime/core/userlanguagemodel.h>
 #include <libime/pinyin/pinyindictionary.h>
+#include <libime/pinyin/pinyinencoder.h>
 #include <algorithm>
 #include <fstream>
 #include <unordered_set>
@@ -232,6 +233,41 @@ void Engine::recordCommitHistory(InputContext *ic, const std::string &prior, con
         s->pendingHistory = s->localHistory;
     }
 }
+void Engine::rankUnigram(State *s) {
+    std::vector<std::string> readings;
+    if (s->pinyin.useShuangpin()) {
+        const auto converted = convertShuangpin(s->pinyin.userInput(), *ime_->shuangpinProfile());
+        if (!converted.invalidSpans.empty() || converted.tokens.size() != 1 ||
+            converted.tokens.front().end - converted.tokens.front().begin != 2) return;
+        readings = converted.tokens.front().alternatives;
+    } else {
+        for (const auto &[initial, finals] : libime::PinyinEncoder::stringToSyllables(
+                 s->pinyin.userInput(), libime::PinyinFuzzyFlag::None))
+            for (const auto &[final, fuzzy] : finals)
+                if (initial != libime::PinyinInitial::Invalid && final != libime::PinyinFinal::Invalid)
+                    readings.push_back(libime::PinyinSyllable(initial, final).toString());
+    }
+    if (readings.empty()) return;
+    const auto &classic = s->pinyin.candidatesToCursor();
+    const auto *model = ime_->model();
+    std::vector<std::pair<float, size_t>> ranked;
+    for (size_t i = 0; i < classic.size(); ++i) {
+        const auto &candidate = classic[i];
+        if (candidate.size() != 1 || candidate.sentence().front()->to()->index() != s->pinyin.size() ||
+            utf8::length(candidate.toString()) != 1) continue;
+        const auto spelling = s->pinyin.candidateFullPinyin(candidate);
+        if (std::find(readings.begin(), readings.end(), spelling) == readings.end()) continue;
+        libime::State next;
+        // The static model's null state yields P(word), without BOS or learned bigrams.
+        const auto score = model->libime::LanguageModel::score(
+            model->libime::LanguageModel::nullState(), *candidate.sentence().front(), next);
+        ranked.emplace_back(score, i);
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto &a, const auto &b) {
+        return a.first > b.first;
+    });
+    for (const auto &[score, index] : ranked) s->unigramIndices.push_back(index);
+}
 void Engine::render(InputContext *ic) {
     auto *s = state(ic);
     auto &panel = ic->inputPanel();
@@ -256,6 +292,9 @@ void Engine::render(InputContext *ic) {
                 list->append<Word>(this, s->generation, true, i, candidateText(presentation));
         }
         const auto &classic = s->pinyin.candidatesToCursor();
+        for (const auto i : s->unigramIndices)
+            if (seen.insert(classic[i].toString()).second)
+                list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));
         // Model proposals take the leading positions, but cannot erase a
         // dictionary alternative which the model did not produce (e.g. 嘛).
         for (size_t i = 0; i < classic.size(); ++i)
@@ -288,9 +327,11 @@ void Engine::update(InputContext *ic, bool infer) {
     if (s->lastUpdate && *s->lastUpdate == snapshot) return;
     s->invalidate();
     s->lastUpdate = std::move(snapshot);
-    if (eligible && config_.model->empty()) s->error = _("Set the model package directory in Phono settings");
+    if (eligible && *config_.preferUnigram && s->lastUpdate->history.empty()) rankUnigram(s);
+    if (eligible && s->unigramIndices.empty() && config_.model->empty())
+        s->error = _("Set the model package directory in Phono settings");
     render(ic);
-    if (!eligible || config_.model->empty()) return;
+    if (!eligible || !s->unigramIndices.empty() || config_.model->empty()) return;
     Request request;
     request.contextId = s->id;
     request.pinyin = s->pinyin.userInput();
