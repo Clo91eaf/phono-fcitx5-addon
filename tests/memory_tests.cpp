@@ -24,7 +24,7 @@ public:
     void updatePreeditImpl() override {}
     std::string committed;
 };
-void run(int phase) {
+void run(int phase, int scenario = 0) {
     optind = 0;
     char name[] = "memory-test", disable[] = "--disable=all";
     char *argv[] = {name, disable, nullptr};
@@ -54,7 +54,32 @@ void run(int phase) {
             if (candidates[i].toString() == text) { engine.select(&ic, state->generation, false, i); return; }
         throw std::runtime_error("missing phrase component: " + text);
     };
-    if (phase == 3) {
+    auto waitModel = [&] {
+        const auto deadline = now(CLOCK_MONOTONIC) + 2000000;
+        bool ready = false;
+        auto timer = instance.eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC), 0,
+            [&](EventSourceTime *timer, uint64_t) {
+                ready = !state->beams.empty();
+                if (ready || now(CLOCK_MONOTONIC) > deadline) { instance.eventLoop().exit(); return false; }
+                timer->setTime(now(CLOCK_MONOTONIC) + 2000); timer->setOneShot(); return true;
+            });
+        instance.eventLoop().exec(); CHECK(ready);
+    };
+    if (phase == 4) {
+        type("nihao"); choose("倪"); choose("好");
+        config.setValueByPath("Enabled", "True");
+        config.setValueByPath("ModelDirectory", "/test/model");
+        const bool pairs = scenario & 4, exactOnly = scenario & 2, longer = scenario & 1;
+        config.setValueByPath("UserWordsExactOnly", exactOnly ? "True" : "False");
+        engine.setConfig(config);
+        InputMethodEntry mode(pairs ? "phono-shuangpin" : "phono", "Phono", "zh_CN", "phono");
+        InputContextEvent activated(&ic, EventType::InputContextFocusIn);
+        engine.activate(mode, activated);
+        type(pairs ? (longer?"nihcma":"nihc") : (longer?"nihaoma":"nihao"));
+        waitModel();
+        CHECK(first() == ((!exactOnly || !longer) ? "倪好" : "倪好嘛"));
+        key(FcitxKey_Escape);
+    } else if (phase == 3) {
         type("ni"); choose("倪");
         type("ni"); CHECK(first() == "倪"); key(FcitxKey_Escape);
         type("nihaoma"); CHECK(first() != "倪"); key(FcitxKey_Escape);
@@ -107,6 +132,11 @@ void run(int phase) {
 int main() {
     try {
         const auto file = std::filesystem::path(std::getenv("XDG_DATA_HOME")) / "fcitx5/phono/learning.json";
+        std::filesystem::remove(file);
+        for (int scenario = 0; scenario < 8; ++scenario) {
+            run(4, scenario);
+            std::filesystem::remove(file);
+        }
         std::filesystem::remove(file);
         run(3);
         std::filesystem::remove(file);

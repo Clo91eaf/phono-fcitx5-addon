@@ -77,6 +77,7 @@ Selecting a model candidate commits the sentence. Selecting a dictionary candida
 | ↑ / ↓ | 移动候选光标<br>Move the candidate cursor |
 | ← / →、Home / End | 移动拼音光标<br>Move the pinyin cursor |
 | Backspace / Delete | 删除拼音<br>Delete pinyin |
+| Delete（高亮用户词时） | 删除该用户词并重新生成候选<br>Forget the highlighted user word and regenerate candidates |
 | Enter | 提交已选文字及剩余原始输入<br>Commit selected text and the remaining raw input |
 | Escape | 取消当前输入<br>Cancel the composition |
 
@@ -87,6 +88,10 @@ Shuangpin supports Natural Code, Microsoft, Purple Light, Smart ABC, Chinese Sta
 中文标点和全角字符通过 Fcitx5 的原生功能处理。词典选词可学习，Phono 的用户词典独立保存；模型候选不参与词典学习。
 
 Chinese punctuation and full-width characters use Fcitx5’s native features. Dictionary selections can be learned and are stored in Phono’s separate user dictionary; model candidates do not contribute to dictionary learning.
+
+「仅精确匹配时优先用户词」默认开启：用户词只匹配输入前缀、简拼或未完成音节时，排在模型结果之后。关闭后可优先显示前缀用户词；多字输入中的单字记忆始终不前置。高亮用户词后按 Delete 可删除记忆并重新生成候选，全拼和双拼共用学习记录。
+
+“Prioritize user words only for exact matches” is enabled by default. User words matching a prefix, abbreviation, or unfinished syllable follow model results. Disabling it allows prefix user words to lead; single-character memories never receive priority for longer input. Highlight a user word and press Delete to forget it and regenerate candidates. Pinyin and shuangpin share learning records.
 
 ## 上文与隐私 / Context and privacy
 

@@ -280,6 +280,29 @@ void Engine::render(InputContext *ic) {
         list->setSelectionKey(selectionKeys());
         std::unordered_set<std::string> seen;
         const auto &classic = s->pinyin.candidatesToCursor();
+        const auto remaining = s->pinyin.userInput().substr(s->pinyin.selectedLength());
+        const auto converted = s->pinyin.useShuangpin()
+            ? convertShuangpin(remaining, *ime_->shuangpinProfile()) : ShuangpinConversion{};
+        auto exact = [&](size_t index) {
+            const auto &sentence = classic[index].sentence();
+            if (sentence.empty() || sentence.back()->to()->index() != s->pinyin.size()) return false;
+            auto spelling = s->pinyin.candidateFullPinyin(classic[index]);
+            if (!s->pinyin.useShuangpin()) {
+                auto input = remaining;
+                std::erase(input, '\''); std::erase(spelling, '\'');
+                return input == spelling;
+            }
+            if (!converted.invalidSpans.empty()) return false;
+            std::istringstream readings(spelling);
+            std::string reading;
+            size_t token = 0;
+            while (std::getline(readings, reading, '\'')) {
+                if (token >= converted.tokens.size()) return false;
+                const auto &alternatives = converted.tokens[token++].alternatives;
+                if (std::find(alternatives.begin(), alternatives.end(), reading) == alternatives.end()) return false;
+            }
+            return token == converted.tokens.size();
+        };
         std::vector<std::pair<uint32_t, size_t>> personal;
         for (size_t i = 0; i < classic.size(); ++i) {
             const auto count = frequency(s->pinyin.candidateFullPinyin(classic[i]), classic[i].toString());
@@ -289,7 +312,7 @@ void Engine::render(InputContext *ic) {
         }
         std::stable_sort(personal.begin(), personal.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
         for (const auto &[count, index] : personal)
-            if (seen.insert(classic[index].toString()).second)
+            if ((!*config_.userWordsExactOnly || exact(index)) && seen.insert(classic[index].toString()).second)
                 list->append<Word>(this, s->generation, false, index, Text(classic[index].toString()));
         for (size_t i = 0; i < s->beams.size(); ++i) {
             const auto presentation = presentCandidate(s->beams[i], s->invalid, *config_.invalidInput);
@@ -299,7 +322,10 @@ void Engine::render(InputContext *ic) {
         for (const auto i : s->unigramIndices)
             if (seen.insert(classic[i].toString()).second)
                 list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));
-        // Remembered phrases lead, followed by model and ordinary dictionary candidates.
+        for (const auto &[count, index] : personal)
+            if (seen.insert(classic[index].toString()).second)
+                list->append<Word>(this, s->generation, false, index, Text(classic[index].toString()));
+        // Remaining native dictionary candidates follow model and user words.
         for (size_t i = 0; i < classic.size(); ++i)
             if (seen.insert(classic[i].toString()).second)
                 list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));

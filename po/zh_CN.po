@@ -21,6 +21,9 @@ msgstr "启用 Phono 模型"
 msgid "Use unigram probabilities for a single syllable without context"
 msgstr "无上下文单字使用一元词概率"
 
+msgid "Prioritize user words only for exact matches"
+msgstr "仅精确匹配时优先用户词"
+
 msgid "Model package directory"
 msgstr "模型包目录"
 
