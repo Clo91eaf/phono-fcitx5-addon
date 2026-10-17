@@ -31,7 +31,9 @@ void run(int phase, int scenario = 0) {
     Instance instance(2, argv);
     instance.addonManager().registerDefaultLoader(nullptr);
     instance.initialize();
-    Engine engine(&instance, [](const Request &) { return Result{{"倪好嘛", "模型"}, {}, 3}; });
+    Engine engine(&instance, [phase](const Request &) {
+        return phase == 5 ? Result{{"模型", "模型二"}, {}, 3} : Result{{"倪好嘛", "模型"}, {}, 3};
+    });
     Context ic(instance.inputContextManager());
     ic.setCapabilityFlags({CapabilityFlag::Preedit});
     ic.focusIn();
@@ -39,6 +41,10 @@ void run(int phase, int scenario = 0) {
     RawConfig config;
     config.setValueByPath("Enabled", "False");
     config.setValueByPath("PreferUnigramSingleSyllable", "False");
+    config.setValueByPath("UserWordsEnabled", "True");
+    config.setValueByPath("UserWordsFirst", "True");
+    config.setValueByPath("UserWordsExactOnly", "True");
+    config.setValueByPath("Learning", "True");
     engine.setConfig(config);
     auto key = [&](KeySym symbol) {
         KeyEvent event(&ic, Key(symbol), false);
@@ -65,7 +71,39 @@ void run(int phase, int scenario = 0) {
             });
         instance.eventLoop().exec(); CHECK(ready);
     };
-    if (phase == 4) {
+    if (phase == 5) {
+        type("nihaoma"); choose("倪"); choose("好"); choose("嘛");
+        const bool pairs = scenario & 4, enabled = scenario & 2, firstWord = scenario & 1;
+        InputMethodEntry mode(pairs ? "phono-shuangpin" : "phono", "Phono", "zh_CN", "phono");
+        InputContextEvent activated(&ic, EventType::InputContextFocusIn);
+        engine.activate(mode, activated);
+        const auto input = pairs ? "nihcma" : "nihaoma";
+        type(input); CHECK(first() == "倪好嘛");
+        // Disabling and re-enabling affects an existing composition, without erasing its memory.
+        config.setValueByPath("UserWordsEnabled", "False"); engine.setConfig(config); engine.activate(mode, activated);
+        CHECK(state->pinyin.userInput() == input && first() != "倪好嘛");
+        config.setValueByPath("UserWordsEnabled", "True"); engine.setConfig(config); engine.activate(mode, activated);
+        CHECK(first() == "倪好嘛"); key(FcitxKey_Escape);
+        config.setValueByPath("Enabled", "True");
+        config.setValueByPath("ModelDirectory", "/test/model");
+        config.setValueByPath("Learning", "False");
+        config.setValueByPath("UserWordsEnabled", enabled ? "True" : "False");
+        config.setValueByPath("UserWordsFirst", firstWord ? "True" : "False");
+        engine.setConfig(config); engine.activate(mode, activated);
+        type(input); waitModel();
+        CHECK(first() == ((enabled && firstWord) ? "倪好嘛" : "模型"));
+        if (enabled) {
+            auto list = ic.inputPanel().candidateList();
+            int index = 0;
+            while (index < list->size() && list->candidate(index).text().toString() != "倪好嘛") ++index;
+            CHECK(index < list->size());
+            for (int i = 0; i < index; ++i) key(FcitxKey_Down);
+            const auto cancelled = state->cancelled;
+            key(FcitxKey_Delete);
+            CHECK(state->pinyin.userInput() == input && state->beams.empty());
+            CHECK(state->cancelled && state->cancelled != cancelled);
+        }
+    } else if (phase == 4) {
         type("nihao"); choose("倪"); choose("好");
         config.setValueByPath("Enabled", "True");
         config.setValueByPath("ModelDirectory", "/test/model");
@@ -80,6 +118,7 @@ void run(int phase, int scenario = 0) {
         CHECK(first() == ((!exactOnly || !longer) ? "倪好" : "倪好嘛"));
         key(FcitxKey_Escape);
     } else if (phase == 3) {
+        config.setValueByPath("UserWordsExactOnly", "False"); engine.setConfig(config);
         type("ni"); choose("倪");
         type("ni"); CHECK(first() == "倪"); key(FcitxKey_Escape);
         type("nihaoma"); CHECK(first() != "倪"); key(FcitxKey_Escape);
@@ -133,6 +172,12 @@ int main() {
     try {
         const auto file = std::filesystem::path(std::getenv("XDG_DATA_HOME")) / "fcitx5/phono/learning.json";
         std::filesystem::remove(file);
+        for (int scenario = 0; scenario < 8; ++scenario) {
+            run(5, scenario);
+            { std::ifstream in(file); const auto data = nlohmann::json::parse(in).at("selections");
+              CHECK(data.size() == ((scenario & 2) ? 0 : 1)); }
+            std::filesystem::remove(file);
+        }
         for (int scenario = 0; scenario < 8; ++scenario) {
             run(4, scenario);
             std::filesystem::remove(file);

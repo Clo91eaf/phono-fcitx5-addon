@@ -93,6 +93,10 @@ Chinese punctuation and full-width characters use Fcitx5’s native features. Di
 
 “Prioritize user words only for exact matches” is enabled by default. User words matching a prefix, abbreviation, or unfinished syllable follow model results. Disabling it allows prefix user words to lead; single-character memories never receive priority for longer input. Highlight a user word and press Delete to forget it and regenerate candidates. Pinyin and shuangpin share learning records.
 
+「启用用户词」和「用户词排在模型结果之前」默认开启。关闭前者后，不使用用户词和记忆排序，保留已有记录；关闭后者后，用户词排在模型结果之后。「学习词典选择」独立控制是否继续学习新词。
+
+“Enable user words” and “Show user words before model results” are enabled by default. Disable the former to stop using remembered vocabulary and ranking while retaining saved records; disable the latter to place user words after model results. “Learn from dictionary selections” independently controls new learning.
+
 ## 上文与隐私 / Context and privacy
 
 Phono 优先读取应用提供的光标前文本，以生成符合上文的候选；可在配置中关闭「使用应用提供的上文」或调整读取字符数。应用不提供有效上文时，只使用当前输入上下文中连续提交的历史。

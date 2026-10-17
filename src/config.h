@@ -55,6 +55,8 @@ FCITX_CONFIGURATION(
     fcitx::Option<std::string, DecimalConstrain> decayLambda{this, "DecayLambda", _("Cache time decay factor (decimal)"), "0.02", {}};
     fcitx::Option<bool> learning{this, "Learning", _("Learn from dictionary selections"), true};
     fcitx::Option<bool> userWordsExactOnly{this, "UserWordsExactOnly", _("Prioritize user words only for exact matches"), true};
+    fcitx::Option<bool> userWordsEnabled{this, "UserWordsEnabled", _("Enable user words"), true};
+    fcitx::Option<bool> userWordsFirst{this, "UserWordsFirst", _("Show user words before model results"), true};
 );
 
 inline Settings settingsFor(const Config &config, bool shuangpin = false) {

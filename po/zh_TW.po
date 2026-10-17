@@ -24,6 +24,12 @@ msgstr "無上下文單字使用一元詞機率"
 msgid "Prioritize user words only for exact matches"
 msgstr "僅精確匹配時優先使用者詞彙"
 
+msgid "Enable user words"
+msgstr "啟用使用者詞彙"
+
+msgid "Show user words before model results"
+msgstr "使用者詞彙排在模型結果之前"
+
 msgid "Model package directory"
 msgstr "模型套件目錄"
 

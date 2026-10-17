@@ -123,6 +123,8 @@ Engine::Engine(Instance *instance, Worker::Inference inference)
     ime_->setNBest(3);
     ime_->setScoreFilter(1);
     ime_->setPreeditMode(libime::PinyinPreeditMode::RawText);
+    ime_->setShuangpinProfile(std::make_shared<libime::ShuangpinProfile>(
+        static_cast<libime::ShuangpinBuiltinProfile>(*config_.shuangpin)));
     loadLearning();
     instance_->inputContextManager().registerProperty("phonoState", &factory_);
     reloadConfig();
@@ -308,23 +310,23 @@ void Engine::render(InputContext *ic) {
             const auto count = frequency(s->pinyin.candidateFullPinyin(classic[i]), classic[i].toString());
             const bool complete = !classic[i].sentence().empty() &&
                 classic[i].sentence().back()->to()->index() == s->pinyin.size();
-            if (count && (complete || utf8::length(classic[i].toString()) != 1)) personal.emplace_back(count, i);
+            if (*config_.userWordsEnabled && count && (complete || utf8::length(classic[i].toString()) != 1)) personal.emplace_back(count, i);
         }
         std::stable_sort(personal.begin(), personal.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
         for (const auto &[count, index] : personal)
-            if ((!*config_.userWordsExactOnly || exact(index)) && seen.insert(classic[index].toString()).second)
+            if (*config_.userWordsFirst && (!*config_.userWordsExactOnly || exact(index)) && seen.insert(classic[index].toString()).second)
                 list->append<Word>(this, s->generation, false, index, Text(classic[index].toString()));
         for (size_t i = 0; i < s->beams.size(); ++i) {
             const auto presentation = presentCandidate(s->beams[i], s->invalid, *config_.invalidInput);
             if (seen.insert(presentation.committed).second)
                 list->append<Word>(this, s->generation, true, i, candidateText(presentation));
         }
-        for (const auto i : s->unigramIndices)
-            if (seen.insert(classic[i].toString()).second)
-                list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));
         for (const auto &[count, index] : personal)
             if (seen.insert(classic[index].toString()).second)
                 list->append<Word>(this, s->generation, false, index, Text(classic[index].toString()));
+        for (const auto i : s->unigramIndices)
+            if (seen.insert(classic[i].toString()).second)
+                list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));
         // Remaining native dictionary candidates follow model and user words.
         for (size_t i = 0; i < classic.size(); ++i)
             if (seen.insert(classic[i].toString()).second)
@@ -625,18 +627,29 @@ void Engine::invokeActionImpl(const InputMethodEntry &, InvokeActionEvent &event
     update(event.inputContext(), true);
 }
 void Engine::setConfig(const RawConfig &raw) {
+    const auto previousScheme = *config_.shuangpin;
     config_.load(raw, true);
     safeSaveAsIni(config_, "conf/phono.conf");
-    configChanged();
+    configChanged(previousScheme != *config_.shuangpin);
 }
-void Engine::configChanged() {
-    ime_->setShuangpinProfile(std::make_shared<libime::ShuangpinProfile>(
+void Engine::configChanged(bool shuangpinChanged) {
+    ime_->dict()->setFlags(libime::PinyinDictionary::UserDict,
+        *config_.userWordsEnabled ? libime::PinyinDictFlag::NoFlag : libime::PinyinDictFlag::Disabled);
+    if (shuangpinChanged) ime_->setShuangpinProfile(std::make_shared<libime::ShuangpinProfile>(
         static_cast<libime::ShuangpinBuiltinProfile>(*config_.shuangpin)));
     instance_->inputContextManager().foreach([this](InputContext *ic) {
         if (ic->property("phonoState")) {
             auto *s = state(ic);
             s->invalidate();
             s->clearPendingHistory();
+            if (!s->pinyin.empty()) {
+                const auto cursor = s->pinyin.cursor();
+                const auto begin = s->pinyin.selectedLength();
+                const auto input = s->pinyin.userInput().substr(begin);
+                s->pinyin.erase(begin, s->pinyin.size());
+                s->pinyin.type(input);
+                s->pinyin.setCursor(cursor);
+            }
             const auto *entry = instance_->inputMethodEntry(ic);
             if (phonoEntry(entry)) update(ic, true);
         }
@@ -644,10 +657,11 @@ void Engine::configChanged() {
     });
 }
 void Engine::reloadConfig() {
+    const auto previousScheme = *config_.shuangpin;
     RawConfig raw;
     readAsIni(raw, "conf/phono.conf");
     config_.load(raw);
-    configChanged();
+    configChanged(previousScheme != *config_.shuangpin);
 }
 void Engine::save() {
     safeSaveAsIni(config_, "conf/phono.conf");
@@ -701,7 +715,7 @@ void Engine::saveLearning() {
 bool Engine::forget(InputContext *ic, uint64_t generation, size_t index) {
     auto *s = state(ic);
     const auto &candidates = s->pinyin.candidatesToCursor();
-    if (generation != s->generation || index >= candidates.size()) return false;
+    if (!*config_.userWordsEnabled || generation != s->generation || index >= candidates.size()) return false;
     const auto text = candidates[index].toString();
     const auto pinyin = s->pinyin.candidateFullPinyin(candidates[index]);
     if (!learned_.erase(pinyin + "\t" + text)) return false;
@@ -710,10 +724,10 @@ bool Engine::forget(InputContext *ic, uint64_t generation, size_t index) {
     saveLearning();
     // Re-decode unchanged input using PinyinContext's existing editing API.
     const auto cursor = s->pinyin.cursor();
-    const auto last = s->pinyin.userInput().back();
-    s->pinyin.setCursor(s->pinyin.size());
-    s->pinyin.backspace();
-    s->pinyin.type(std::string(1, last));
+    const auto begin = s->pinyin.selectedLength();
+    const auto input = s->pinyin.userInput().substr(begin);
+    s->pinyin.erase(begin, s->pinyin.size());
+    s->pinyin.type(input);
     s->pinyin.setCursor(cursor);
     update(ic, true);
     return true;
