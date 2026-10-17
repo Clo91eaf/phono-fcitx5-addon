@@ -8,6 +8,7 @@
 #include <libime/pinyin/pinyincontext.h>
 #include <libime/pinyin/pinyinime.h>
 #include <optional>
+#include <map>
 
 namespace fcitx { class Instance; }
 namespace phono_fcitx {
@@ -79,6 +80,7 @@ public:
     void reloadConfig() override;
     void save() override;
     void select(fcitx::InputContext *, uint64_t generation, bool model, size_t index);
+    bool forget(fcitx::InputContext *, uint64_t generation, size_t index);
     State *state(fcitx::InputContext *ic);
 private:
     void update(fcitx::InputContext *, bool infer);
@@ -90,6 +92,10 @@ private:
     void recordCommitHistory(fcitx::InputContext *, const std::string &prior, const std::string &text);
     bool sensitive(fcitx::InputContext *) const;
     void configChanged();
+    void loadLearning();
+    void saveLearning();
+    uint32_t frequency(const std::string &pinyin, const std::string &text) const;
+    std::map<std::string, uint32_t> learned_;
     fcitx::Instance *instance_;
     Config config_;
     uint64_t nextContext_ = 0;

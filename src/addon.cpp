@@ -30,6 +30,8 @@
 #include <libime/pinyin/pinyinencoder.h>
 #include <algorithm>
 #include <fstream>
+#include <iomanip>
+#include <sstream>
 #include <unordered_set>
 
 namespace phono_fcitx {
@@ -56,6 +58,7 @@ public:
         : CandidateWord(std::move(text)), engine_(engine), generation_(generation),
           model_(model), index_(index) {}
     void select(InputContext *ic) const override { engine_->select(ic, generation_, model_, index_); }
+    bool forget(InputContext *ic) const { return !model_ && engine_->forget(ic, generation_, index_); }
 private:
     Engine *engine_;
     uint64_t generation_;
@@ -120,17 +123,7 @@ Engine::Engine(Instance *instance, Worker::Inference inference)
     ime_->setNBest(3);
     ime_->setScoreFilter(1);
     ime_->setPreeditMode(libime::PinyinPreeditMode::RawText);
-    for (const auto &name : {"phono/user.dict", "phono/user.history"}) {
-        auto file = openUserData(name);
-        if (!file.isValid()) continue;
-        try {
-            InputFDStreamBuf buffer(file.fd());
-            std::istream in(&buffer);
-            if (std::string(name).ends_with("dict"))
-                ime_->dict()->load(libime::PinyinDictionary::UserDict, in, libime::PinyinDictFormat::Binary);
-            else ime_->model()->load(in);
-        } catch (const std::exception &e) { FCITX_WARN() << "Phono: " << e.what(); }
-    }
+    loadLearning();
     instance_->inputContextManager().registerProperty("phonoState", &factory_);
     reloadConfig();
     watchers_.push_back(instance_->watchEvent(EventType::InputContextSurroundingTextUpdated,
@@ -286,17 +279,25 @@ void Engine::render(InputContext *ic) {
         list->setPageSize(*config_.pageSize);
         list->setSelectionKey(selectionKeys());
         std::unordered_set<std::string> seen;
+        const auto &classic = s->pinyin.candidatesToCursor();
+        std::vector<std::pair<uint32_t, size_t>> personal;
+        for (size_t i = 0; i < classic.size(); ++i) {
+            const auto count = frequency(s->pinyin.candidateFullPinyin(classic[i]), classic[i].toString());
+            if (count) personal.emplace_back(count, i);
+        }
+        std::stable_sort(personal.begin(), personal.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+        for (const auto &[count, index] : personal)
+            if (seen.insert(classic[index].toString()).second)
+                list->append<Word>(this, s->generation, false, index, Text(classic[index].toString()));
         for (size_t i = 0; i < s->beams.size(); ++i) {
             const auto presentation = presentCandidate(s->beams[i], s->invalid, *config_.invalidInput);
             if (seen.insert(presentation.committed).second)
                 list->append<Word>(this, s->generation, true, i, candidateText(presentation));
         }
-        const auto &classic = s->pinyin.candidatesToCursor();
         for (const auto i : s->unigramIndices)
             if (seen.insert(classic[i].toString()).second)
                 list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));
-        // Model proposals take the leading positions, but cannot erase a
-        // dictionary alternative which the model did not produce (e.g. 嘛).
+        // Remembered phrases lead, followed by model and ordinary dictionary candidates.
         for (size_t i = 0; i < classic.size(); ++i)
             if (seen.insert(classic[i].toString()).second)
                 list->append<Word>(this, s->generation, false, i, Text(classic[i].toString()));
@@ -381,7 +382,15 @@ void Engine::commit(InputContext *ic, const std::string &text, bool learn) {
     auto *s = state(ic);
     const auto priorHistory = history(ic);
     s->invalidate();
-    if (learn && *config_.learning && !sensitive(ic)) s->pinyin.learn();
+    if (learn && *config_.learning && !sensitive(ic)) {
+        const auto pinyin = s->pinyin.selectedFullPinyin();
+        if (!pinyin.empty()) {
+            auto &count = learned_[pinyin + "\t" + text];
+            count = std::min(count + 1, uint32_t(100000));
+            ime_->dict()->addWord(libime::PinyinDictionary::UserDict, pinyin, text);
+            saveLearning();
+        }
+    }
     recordCommitHistory(ic, priorHistory, text);
     s->pinyin.clear();
     s->splitting = false;
@@ -494,7 +503,14 @@ void Engine::keyEvent(const InputMethodEntry &, KeyEvent &event) {
     if (sym == FcitxKey_BackSpace) {
         if (s->pinyin.cursor() == s->pinyin.selectedLength() && s->pinyin.selectedLength()) s->pinyin.cancel();
         else s->pinyin.backspace();
-    } else if (sym == FcitxKey_Delete) s->pinyin.del();
+    } else if (sym == FcitxKey_Delete) {
+        const auto index = list && list->cursorIndex() >= 0 ? list->cursorIndex() : 0;
+        if (list && index < list->size()) {
+            const auto *word = dynamic_cast<const Word *>(&list->candidate(index));
+            if (word && word->forget(ic)) { event.filterAndAccept(); return; }
+        }
+        s->pinyin.del();
+    }
     else if (sym == FcitxKey_Left) {
         if (s->pinyin.cursor() == s->pinyin.selectedLength() && s->pinyin.selectedLength()) s->pinyin.cancel();
         else if (s->pinyin.cursor()) s->pinyin.setCursor(s->pinyin.cursor() - 1);
@@ -607,17 +623,71 @@ void Engine::reloadConfig() {
 }
 void Engine::save() {
     safeSaveAsIni(config_, "conf/phono.conf");
-    for (const auto &name : {"phono/user.dict", "phono/user.history"})
-        saveUserData(name, [this, name](int fd) {
-            try {
-                OutputFDStreamBuf buffer(fd);
-                std::ostream out(&buffer);
-                if (std::string(name).ends_with("dict"))
-                    ime_->dict()->save(libime::PinyinDictionary::UserDict, out, libime::PinyinDictFormat::Binary);
-                else ime_->model()->save(out);
-                out.flush();
-                return static_cast<bool>(out);
-            } catch (const std::exception &e) { FCITX_WARN() << "Phono: " << e.what(); return false; }
-        });
+    saveLearning();
+}
+uint32_t Engine::frequency(const std::string &pinyin, const std::string &text) const {
+    const auto it = learned_.find(pinyin + "\t" + text);
+    return it == learned_.end() ? 0 : it->second;
+}
+void Engine::loadLearning() {
+    auto file = openUserData("phono/learning.json");
+    try {
+        if (file.isValid()) {
+            InputFDStreamBuf buffer(file.fd());
+            std::istream in(&buffer);
+            learned_ = nlohmann::json::parse(in).at("selections").get<decltype(learned_)>();
+        } else {
+            // Import legacy vocabulary once. Dictionary weights are not selection counts.
+            auto legacy = openUserData("phono/user.dict");
+            if (legacy.isValid()) {
+                InputFDStreamBuf buffer(legacy.fd());
+                std::istream in(&buffer);
+                libime::PinyinDictionary dictionary;
+                dictionary.load(libime::PinyinDictionary::UserDict, in, libime::PinyinDictFormat::Binary);
+                std::stringstream exported;
+                dictionary.save(libime::PinyinDictionary::UserDict, exported, libime::PinyinDictFormat::Text);
+                std::string line, text, pinyin;
+                while (std::getline(exported, line)) {
+                    std::istringstream fields(line);
+                    if (fields >> std::quoted(text) >> pinyin) learned_[pinyin + "\t" + text] = 1;
+                }
+                saveLearning();
+            }
+        }
+        for (const auto &[key, count] : learned_) {
+            const auto separator = key.find('\t');
+            if (count && separator != std::string::npos)
+                ime_->dict()->addWord(libime::PinyinDictionary::UserDict, key.substr(0, separator), key.substr(separator + 1));
+        }
+    } catch (const std::exception &e) { FCITX_WARN() << "Phono: " << e.what(); }
+}
+void Engine::saveLearning() {
+    saveUserData("phono/learning.json", [this](int fd) {
+        OutputFDStreamBuf buffer(fd);
+        std::ostream out(&buffer);
+        out << nlohmann::json{{"schema_version", "1.0"}, {"selections", learned_}}.dump(2);
+        out.flush();
+        return static_cast<bool>(out);
+    });
+}
+bool Engine::forget(InputContext *ic, uint64_t generation, size_t index) {
+    auto *s = state(ic);
+    const auto &candidates = s->pinyin.candidatesToCursor();
+    if (generation != s->generation || index >= candidates.size()) return false;
+    const auto text = candidates[index].toString();
+    const auto pinyin = s->pinyin.candidateFullPinyin(candidates[index]);
+    if (!learned_.erase(pinyin + "\t" + text)) return false;
+    s->invalidate();
+    ime_->dict()->removeWord(libime::PinyinDictionary::UserDict, pinyin, text);
+    saveLearning();
+    // Re-decode unchanged input using PinyinContext's existing editing API.
+    const auto cursor = s->pinyin.cursor();
+    const auto last = s->pinyin.userInput().back();
+    s->pinyin.setCursor(s->pinyin.size());
+    s->pinyin.backspace();
+    s->pinyin.type(std::string(1, last));
+    s->pinyin.setCursor(cursor);
+    update(ic, true);
+    return true;
 }
 } // namespace phono_fcitx

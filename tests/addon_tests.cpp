@@ -262,7 +262,7 @@ int main() {
         steps.push_back([&] {
             if (!hasBeams()) return false;
             auto list = ic.inputPanel().candidateList();
-            CHECK(list->candidate(0).text().toString() == "吗");
+            CHECK(list->candidate(0).text().toString() == unigramCommit);
             std::vector<std::string> texts;
             do {
                 for (int i = 0; i < list->size(); ++i) texts.push_back(list->candidate(i).text().toString());
