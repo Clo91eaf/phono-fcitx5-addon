@@ -48,9 +48,9 @@ Create a `vX.Y.Z` tag and publish its GitHub Release. `release.published` checks
 
 If Release creation is later automated in a workflow, keep building and uploading in that same workflow. The three projects maintain independent versions and do not need synchronized version numbers.
 
-安装包从 [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases) 下载，验证产物保存在 [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) 的 `phono-fcitx5-addon-x86_64-<version>-<target>` artifact 中。每份包含原生包、二进制 `.tar.gz`、校验和、ELF 报告、core SDK 来源和下载指引。Release 指引列出发行版、架构、core 版本和安装命令。
+安装包从 [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases) 下载，验证产物保存在 [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) 的 `phono-fcitx5-addon-x86_64-<version>-<target>` artifact 中。每份包含原生包、二进制 `.tar.gz`、校验和、ELF 报告和 core SDK 来源。安装方法见 README；CI 只上传附件，不修改 Release 正文。
 
-Download installation packages from [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases). Validation artifacts are available in [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) as `phono-fcitx5-addon-x86_64-<version>-<target>`. Each contains a native package, binary `.tar.gz`, checksums, ELF report, core SDK provenance, and download guide. The Release guide identifies the distribution, architecture, core version, and installation command.
+Download installation packages from [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases). Validation artifacts are available in [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) as `phono-fcitx5-addon-x86_64-<version>-<target>`. Each contains a native package, binary `.tar.gz`, checksums, ELF report, and core SDK provenance. See the README for installation instructions. CI only uploads assets and does not edit the Release body.
 
 安装包将 core 放在 addon 旁的私有 `phono/` 目录，通过 `$ORIGIN/phono` 加载，并保留许可证。所有目标验证目录权限、翻译、安装后的动态加载和词典回退；发布产物不得携带开发环境 RPATH。
 

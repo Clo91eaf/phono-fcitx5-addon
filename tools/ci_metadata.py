@@ -32,7 +32,6 @@ def main():
     parser.add_argument("--tag")
     parser.add_argument("--default-branch")
     parser.add_argument("--full", action="store_true")
-    parser.add_argument("--notes", type=Path)
     args = parser.parse_args()
     value = version()
     if args.tag:
@@ -46,27 +45,6 @@ def main():
     if output := os.environ.get("GITHUB_OUTPUT"):
         with open(output, 'a') as stream:
             stream.write(f"version={value}\nmatrix={json.dumps({'include':matrix})}\n")
-    if args.notes:
-        core = json.loads((ROOT / "ci/core-sdk.json").read_text())
-        args.notes.parent.mkdir(parents=True, exist_ok=True)
-        args.notes.write_text(f"""\n## 下载与安装 / Download and installation
-
-版本 {value}，架构 x86_64，内置 core {core['version']}。按自己的发行版选择附件；模型单独下载。
-
-Version {value}, x86_64, bundled core {core['version']}. Choose the asset for your distribution; download models separately.
-
-| 发行版 / Distribution | 安装 / Install |
-| --- | --- |
-| Debian 13 | `sudo apt install ./phono-fcitx5-addon-x86_64-{value}-debian13.deb` |
-| Ubuntu 24.04 | `sudo apt install ./phono-fcitx5-addon-x86_64-{value}-ubuntu2404.deb` |
-| Fedora 43 | `sudo dnf install ./phono-fcitx5-addon-x86_64-{value}-fedora43.rpm` |
-| openSUSE Tumbleweed | `sudo zypper install ./phono-fcitx5-addon-x86_64-{value}-opensuse-tumbleweed.rpm` |
-| Arch Linux | `sudo pacman -U ./phono-fcitx5-addon-x86_64-{value}-arch.pkg.tar.zst` |
-
-模型：[W4A8](https://huggingface.co/afirelily/phonop2c_v2_2_base_w4a8_model) 或 [W8A8](https://huggingface.co/afirelily/phonop2c_v2_2_base_w8a8_model)。在 Fcitx5 的 Phono 设置中将 `ModelDirectory` 指向包含 `config.json`、`bins/` 与 `vocabs/` 的目录。配置保存在 `~/.config/fcitx5/conf/phono.conf`；模型缺失时保留 libime 词典候选。
-
-Models: [W4A8](https://huggingface.co/afirelily/phonop2c_v2_2_base_w4a8_model) or [W8A8](https://huggingface.co/afirelily/phonop2c_v2_2_base_w8a8_model). Set `ModelDirectory` in Fcitx5's Phono settings to the directory containing `config.json`, `bins/` and `vocabs/`. Configuration is stored at `~/.config/fcitx5/conf/phono.conf`; libime dictionary candidates remain available when the model is missing.
-""", encoding='utf-8')
     print(f"Validated addon {value}; {len(matrix)} distribution(s)")
 
 

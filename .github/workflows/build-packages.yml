@@ -83,7 +83,6 @@ jobs:
               python3 tools/ci_build_packages.py --target "$TARGET" \
                 --core-prefix /workspace/.sdk/phono-core --max-glibc "$MAX_GLIBC" \
                 --output "/workspace/dist/$TARGET" "${args[@]}"
-              python3 tools/ci_metadata.py --notes "/workspace/dist/$TARGET/download-guide.md"
             '
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -103,13 +102,10 @@ jobs:
           pattern: phono-fcitx5-addon-x86_64-*
           merge-multiple: true
           path: dist
-      - name: Upload tested packages and add installation instructions
+      - name: Upload tested packages
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           gh release upload "$RELEASE_TAG" dist/* --clobber
-          gh release view "$RELEASE_TAG" --json body --jq .body > release-notes.md
-          cat dist/download-guide.md >> release-notes.md
-          gh release edit "$RELEASE_TAG" --notes-file release-notes.md
