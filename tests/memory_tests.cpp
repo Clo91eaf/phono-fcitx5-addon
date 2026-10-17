@@ -54,7 +54,16 @@ void run(int phase) {
             if (candidates[i].toString() == text) { engine.select(&ic, state->generation, false, i); return; }
         throw std::runtime_error("missing phrase component: " + text);
     };
-    if (phase == 0) {
+    if (phase == 3) {
+        type("ni"); choose("倪");
+        type("ni"); CHECK(first() == "倪"); key(FcitxKey_Escape);
+        type("nihaoma"); CHECK(first() != "倪"); key(FcitxKey_Escape);
+        InputMethodEntry pairs("phono-shuangpin", "Phono", "zh_CN", "phono");
+        InputContextEvent activated(&ic, EventType::InputContextFocusIn);
+        engine.activate(pairs, activated);
+        type("nihcma"); CHECK(first() != "倪");
+        key(FcitxKey_Escape);
+    } else if (phase == 0) {
         type("nihaoma");
         choose("倪"); choose("好"); choose("嘛");
         CHECK(ic.committed == "倪好嘛");
@@ -98,6 +107,8 @@ void run(int phase) {
 int main() {
     try {
         const auto file = std::filesystem::path(std::getenv("XDG_DATA_HOME")) / "fcitx5/phono/learning.json";
+        std::filesystem::remove(file);
+        run(3);
         std::filesystem::remove(file);
         run(0);
         { std::ifstream in(file); const auto data = nlohmann::json::parse(in);

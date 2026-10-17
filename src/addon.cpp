@@ -283,7 +283,9 @@ void Engine::render(InputContext *ic) {
         std::vector<std::pair<uint32_t, size_t>> personal;
         for (size_t i = 0; i < classic.size(); ++i) {
             const auto count = frequency(s->pinyin.candidateFullPinyin(classic[i]), classic[i].toString());
-            if (count) personal.emplace_back(count, i);
+            const bool complete = !classic[i].sentence().empty() &&
+                classic[i].sentence().back()->to()->index() == s->pinyin.size();
+            if (count && (complete || utf8::length(classic[i].toString()) != 1)) personal.emplace_back(count, i);
         }
         std::stable_sort(personal.begin(), personal.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
         for (const auto &[count, index] : personal)
