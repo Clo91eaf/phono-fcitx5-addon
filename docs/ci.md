@@ -26,9 +26,9 @@ Addon GLIBCXX / CXXABI limits come from the target container’s native C++ runt
 
 ## 依赖与模型 / Dependencies and models
 
-`ci/core-sdk.json` 固定 core 版本、SDK 资产与校验和文件。目前依赖 `phono-core-sdk-0.1.1-linux-x86_64.tar.gz`。`tools/fetch_core_sdk.py` 将下载缓存保存在 `.sdk/downloads`，校验 Release 发布的 SHA-256 后安装到 `.sdk/phono-core`，在 `core-sdk.json` 中记录实际校验和。首次使用前，固定版本的 core Release 必须已发布对应 SDK。
+`ci/core-sdk.json` 固定 core 版本与 SDK 资产。目前依赖 `phono-core-sdk-0.1.1-linux-x86_64.tar.gz`。`tools/fetch_core_sdk.py` 将下载缓存保存在 `.sdk/downloads`，安装到 `.sdk/phono-core`，并检查 SDK 内的版本与固定版本一致。首次使用前，固定版本的 core Release 必须已发布对应 SDK。
 
-`ci/core-sdk.json` pins the core version, SDK asset, and checksum file. The current dependency is `phono-core-sdk-0.1.1-linux-x86_64.tar.gz`. `tools/fetch_core_sdk.py` caches downloads in `.sdk/downloads`, checks the SHA-256 published by the Release, installs to `.sdk/phono-core`, and records the actual checksum in `core-sdk.json`. The pinned core Release must publish that SDK before first use.
+`ci/core-sdk.json` pins the core version and SDK asset. The current dependency is `phono-core-sdk-0.1.1-linux-x86_64.tar.gz`. `tools/fetch_core_sdk.py` caches downloads in `.sdk/downloads`, installs to `.sdk/phono-core`, and checks that the installed SDK version matches the pinned version. The pinned core Release must publish that SDK before first use.
 
 SDK 提供 `include/phono-core/phono_api.h`、`lib/libphono_core.so`、`lib/cmake/phono-core` 和 `share/licenses/phono-core`，CMake 目标为 `phono::core`。普通提交更新 `ci/core-sdk.json` 后运行前端验证；core 发布不会自动触发 addon 发布。
 
@@ -48,9 +48,9 @@ Create a `vX.Y.Z` tag and publish its GitHub Release. `release.published` checks
 
 If Release creation is later automated in a workflow, keep building and uploading in that same workflow. The three projects maintain independent versions and do not need synchronized version numbers.
 
-安装包从 [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases) 下载，验证产物保存在 [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) 的 `phono-fcitx5-addon-x86_64-<version>-<target>` artifact 中。每份包含原生包、二进制 `.tar.gz`、校验和、ELF 报告和 core SDK 来源。安装方法见 README；CI 只上传附件，不修改 Release 正文。
+安装包从 [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases) 下载，构建产物保存在 [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) 的 `phono-fcitx5-addon-x86_64-<version>-<target>` artifact 中。每份只包含原生包和二进制 `.tar.gz`；ELF 检查结果输出到 CI 日志。安装方法见 README；CI 只上传二进制包，不修改 Release 正文。
 
-Download installation packages from [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases). Validation artifacts are available in [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) as `phono-fcitx5-addon-x86_64-<version>-<target>`. Each contains a native package, binary `.tar.gz`, checksums, ELF report, and core SDK provenance. See the README for installation instructions. CI only uploads assets and does not edit the Release body.
+Download installation packages from [GitHub Releases](https://github.com/phono-project/phono-fcitx5-addon/releases). Build artifacts are available in [Actions](https://github.com/phono-project/phono-fcitx5-addon/actions/workflows/build-packages.yml) as `phono-fcitx5-addon-x86_64-<version>-<target>`. Each contains only a native package and binary `.tar.gz`; ELF check results are printed in CI logs. See the README for installation instructions. CI only uploads binary packages and does not edit the Release body.
 
 安装包将 core 放在 addon 旁的私有 `phono/` 目录，通过 `$ORIGIN/phono` 加载，并保留许可证。所有目标验证目录权限、翻译、安装后的动态加载和词典回退；发布产物不得携带开发环境 RPATH。
 
@@ -86,12 +86,4 @@ Outputs are written to `dist/ubuntu2404/`. See the workflow matrix for other tar
 gh workflow run build-packages.yml --ref <branch> -f full_matrix=true
 gh run list --workflow build-packages.yml
 gh run download <run-id> --name "phono-fcitx5-addon-x86_64-<version>-ubuntu2404"
-```
-
-下载或解压后，在包含校验和文件的目录验证：
-
-After downloading or extracting, verify in the directory containing the checksum file:
-
-```sh
-sha256sum --check ubuntu2404-SHA256SUMS
 ```

@@ -142,9 +142,9 @@ pixi run test
 PHONO_TEST_MODEL_DIR=/absolute/path/to/model pixi run test
 ```
 
-SDK 下载到 `.sdk/phono-core`，下载程序校验固定 Release 的校验和，并记录版本、资产名称与实际 SHA-256。测试的配置和用户词典写入构建目录内的隔离环境，日常测试无需模型。使用其他已安装 SDK 时可执行 `PHONO_SDK_PREFIX=/absolute/path/to/sdk pixi run test`；直接调用 CMake 时使用 `-DPHONO_SDK_PREFIX=...` 或 `CMAKE_PREFIX_PATH`。
+SDK 下载到 `.sdk/phono-core`，下载程序检查 SDK 内的版本与固定版本一致。测试的配置和用户词典写入构建目录内的隔离环境，日常测试无需模型。使用其他已安装 SDK 时可执行 `PHONO_SDK_PREFIX=/absolute/path/to/sdk pixi run test`；直接调用 CMake 时使用 `-DPHONO_SDK_PREFIX=...` 或 `CMAKE_PREFIX_PATH`。
 
-The SDK is downloaded to `.sdk/phono-core`. The downloader verifies the pinned Release checksum and records the version, asset name, and actual SHA-256. Tests write settings and user dictionaries to isolated environments inside the build directory; routine tests need no model. To use another installed SDK, run `PHONO_SDK_PREFIX=/absolute/path/to/sdk pixi run test`. Direct CMake builds accept `-DPHONO_SDK_PREFIX=...` or `CMAKE_PREFIX_PATH`.
+The SDK is downloaded to `.sdk/phono-core`. The downloader checks that the installed SDK version matches the pinned version. Tests write settings and user dictionaries to isolated environments inside the build directory; routine tests need no model. To use another installed SDK, run `PHONO_SDK_PREFIX=/absolute/path/to/sdk pixi run test`. Direct CMake builds accept `-DPHONO_SDK_PREFIX=...` or `CMAKE_PREFIX_PATH`.
 
 显式本地覆盖仍支持 `PHONO_CORE_INCLUDE_DIR`、`PHONO_CORE_LIBRARY` 和打包所需的 `PHONO_CORE_LICENSE_ROOT`，通过 `tools/configure.py` 的 `-D` 参数传入。二进制包构建、Release 规则和安装验证见 [CI 文档](docs/ci.md)。贡献代码前请运行适合改动的测试；涉及发行版打包时，可手动运行完整矩阵。
 

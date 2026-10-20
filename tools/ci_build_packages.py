@@ -4,9 +4,7 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import io
-import json
 import os
 from pathlib import Path
 import re
@@ -122,13 +120,9 @@ def main() -> None:
     run([sys.executable, ROOT / "tools/verify_install.py", package_root,
          "--bundled-core", "--require-shuangpin"])
     addon = next(package_root.glob("usr/**/fcitx5/libphono.so"))
-    reports = []
-    for binary, limits in ((addon, (max_glibc, cpp_limits["GLIBCXX"], cpp_limits["CXXABI"])),):
-        result = run([sys.executable, ROOT / "tools/check_elf.py", binary,
-                      "--max-glibc", limits[0], "--max-glibcxx", limits[1],
-                      "--max-cxxabi", limits[2]], capture_output=True)
-        reports.append(f"{binary.name}\n{result.stdout}\n")
-    (output / f"{args.target}-elf-baseline.txt").write_text("\n".join(reports))
+    run([sys.executable, ROOT / "tools/check_elf.py", addon,
+         "--max-glibc", max_glibc, "--max-glibcxx", cpp_limits["GLIBCXX"],
+         "--max-cxxabi", cpp_limits["CXXABI"]])
     # Exercise the installed DSO, including its private-core RUNPATH. The user
     # does not need a separately installed core package or LD_LIBRARY_PATH.
     addon_dir = addon.parent
@@ -200,23 +194,7 @@ def main() -> None:
     if args.model_dir is not None:
         installed_env["PHONO_TEST_MODEL_DIR"] = str(args.model_dir)
         run([build / "load_tests"], env=installed_env)
-    core_info = json.loads((prefix / "core-sdk.json").read_text())
-    (output / f"{args.target}-core-sdk.json").write_text(json.dumps(core_info, indent=2) + "\n")
-    metadata = {
-        "target": args.target, "version": project_version,
-        "architecture": "x86_64", "container_digest": os.environ.get("CONTAINER_DIGEST", "local"),
-        "native_glibc": host_glibc, "addon_glibc_gate": max_glibc,
-        "native_cpp_runtime": cpp_limits,
-        "core_version": core_info["version"], "core_asset": core_info["asset"],
-        "core_sha256": core_info["sha256"],
-    }
-    (output / f"{args.target}-build.json").write_text(json.dumps(metadata, indent=2) + "\n")
-    checksums = []
-    for file in sorted(output.iterdir()):
-        if file.is_file() and not file.name.endswith("SHA256SUMS"):
-            checksums.append(f"{hashlib.sha256(file.read_bytes()).hexdigest()}  {file.name}\n")
-    (output / f"{args.target}-SHA256SUMS").write_text("".join(checksums))
-    print(f"Downloadable binaries, ABI reports and checksums: {output}")
+    print(f"Downloadable binary packages: {output}")
 
 
 if __name__ == "__main__":

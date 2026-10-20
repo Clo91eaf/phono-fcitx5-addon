@@ -1,6 +1,5 @@
 {
   "repository": "phono-project/phono-core",
   "version": "0.1.1",
-  "asset": "phono-core-sdk-0.1.1-linux-x86_64.tar.gz",
-  "checksums": "SHA256SUMS-linux-x86_64.txt"
+  "asset": "phono-core-sdk-0.1.1-linux-x86_64.tar.gz"
 }

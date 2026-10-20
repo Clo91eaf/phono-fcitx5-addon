@@ -56,7 +56,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.release.tag_name || github.ref }}
-      - name: Download and verify the fixed core Release SDK
+      - name: Download the fixed core Release SDK
         run: python3 tools/fetch_core_sdk.py --prefix "$GITHUB_WORKSPACE/.sdk/phono-core"
       - name: Fetch the fixed release inference model
         if: (github.event_name == 'release' || inputs.full_matrix) && matrix.target == 'ubuntu2404'
@@ -72,7 +72,7 @@ jobs:
           image_id=$(docker image inspect "$IMAGE" --format '{{index .RepoDigests 0}}')
           docker run --rm --platform linux/amd64 \
             -v "$GITHUB_WORKSPACE:/workspace" -w /workspace \
-            -e TARGET -e MAX_GLIBC -e REQUIRE_MODEL -e "CONTAINER_DIGEST=$image_id" \
+            -e TARGET -e MAX_GLIBC -e REQUIRE_MODEL \
             -e "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" \
             "$image_id" bash -euc '
               bash ci/install-native-deps.sh "$TARGET"
@@ -87,7 +87,11 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: phono-fcitx5-addon-x86_64-${{ needs.metadata.outputs.version }}-${{ matrix.target }}
-          path: dist/${{ matrix.target }}/*
+          path: |
+            dist/${{ matrix.target }}/*.deb
+            dist/${{ matrix.target }}/*.rpm
+            dist/${{ matrix.target }}/*.pkg.tar.zst
+            dist/${{ matrix.target }}/*.tar.gz
           if-no-files-found: error
 
   upload:
@@ -108,4 +112,4 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          gh release upload "$RELEASE_TAG" dist/* --clobber
+          gh release upload "$RELEASE_TAG" dist/*.deb dist/*.rpm dist/*.pkg.tar.zst dist/*.tar.gz --clobber
