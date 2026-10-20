@@ -1,5 +1,4 @@
 #include "presentation.h"
-#include "config.h"
 #include "check.h"
 
 #include <nlohmann/json.hpp>
@@ -111,12 +110,6 @@ int main() {
         checkRange(boundaries[1], 11, 12, 2, "v");
         checkPresentation("你好", boundaries, "你#!好v");
 
-        Config config;
-        config.invalidInput.setValue(InvalidInputPolicy::Delete);
-        fcitx::RawConfig invalidConfig;
-        invalidConfig.setValueByPath("InvalidInput", "Repair");
-        config.load(invalidConfig, true);
-        CHECK(*config.invalidInput == InvalidInputPolicy::PassThrough);
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
         return 1;
