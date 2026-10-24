@@ -1,6 +1,6 @@
 [workspace]
 name = "phono-fcitx5-addon"
-version = "0.1.2"
+version = "0.1.3"
 description = "In-process asynchronous phono-core input method for Fcitx5"
 channels = ["conda-forge"]
 platforms = ["linux-64"]
