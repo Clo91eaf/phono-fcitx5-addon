@@ -97,6 +97,8 @@ int main() {
             return list->candidate(0);
         };
         RawConfig config;
+        CHECK(!*Config{}.showPreedit);
+        config.setValueByPath("ShowPreedit", "False");
         const char *model = std::getenv("PHONO_TEST_MODEL_DIR");
         const bool real = model && *model;
         config.setValueByPath("Enabled", real ? "True" : "False");
@@ -109,6 +111,19 @@ int main() {
             type("nihk");
             CHECK(state->pinyin.userInput() == "nihk");
             CHECK(state->pinyin.useShuangpin());
+            CHECK(ic.inputPanel().clientPreedit().empty());
+            CHECK(!ic.inputPanel().preedit().empty());
+            config.setValueByPath("ShowPreedit", "True");
+            engine->setConfig(config);
+            CHECK(ic.inputPanel().clientPreedit().toString() == ic.inputPanel().preedit().toString());
+            CHECK(!ic.inputPanel().clientPreedit().empty());
+            CHECK(key(FcitxKey_Left));
+            CHECK(ic.inputPanel().clientPreedit().cursor() == ic.inputPanel().preedit().cursor());
+            CHECK(key(FcitxKey_End));
+            config.setValueByPath("ShowPreedit", "False");
+            engine->setConfig(config);
+            CHECK(ic.inputPanel().clientPreedit().empty());
+            CHECK(!ic.inputPanel().preedit().empty());
             return true;
         });
         steps.push_back([&] {
@@ -248,11 +263,19 @@ int main() {
             CHECK(!state->pinyin.useShuangpin());
             type("nihao");
             CHECK(state->pinyin.userInput() == "nihao");
+            CHECK(ic.inputPanel().clientPreedit().empty());
+            CHECK(!ic.inputPanel().preedit().empty());
+            config.setValueByPath("ShowPreedit", "True");
+            engine->setConfig(config);
+            CHECK(!ic.inputPanel().clientPreedit().empty());
             CHECK(first().text().toStringForCommit() == "你好");
             const auto before = ic.committed;
             CHECK(key(FcitxKey_period));
             CHECK(ic.committed == before + "你好。");
             CHECK(state->pinyin.empty());
+            CHECK(ic.inputPanel().clientPreedit().empty());
+            config.setValueByPath("ShowPreedit", "False");
+            engine->setConfig(config);
             if (real) {
                 config.setValueByPath("Enabled", "True");
                 config.setValueByPath("InvalidInput", "Delete (show struck-out text)");

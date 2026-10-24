@@ -272,10 +272,11 @@ void Engine::render(InputContext *ic) {
         preedit = Text(text, TextFormatFlag::Underline);
         preedit.setCursor(cursor);
     }
-    const bool preeditChanged = !sameText(panel.clientPreedit(), preedit);
+    const Text clientPreedit = *config_.showPreedit ? preedit : Text{};
+    const bool preeditChanged = !sameText(panel.clientPreedit(), clientPreedit);
     panel.reset();
     if (!s->pinyin.empty()) {
-        panel.setClientPreedit(preedit);
+        panel.setClientPreedit(clientPreedit);
         panel.setPreedit(preedit);
         auto list = std::make_unique<CommonCandidateList>();
         list->setPageSize(*config_.pageSize);

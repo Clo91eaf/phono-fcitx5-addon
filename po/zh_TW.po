@@ -18,6 +18,9 @@ msgstr ""
 msgid "Enable Phono model"
 msgstr "啟用 Phono 模型"
 
+msgid "Show preedit"
+msgstr "顯示預編輯框"
+
 msgid "Use unigram probabilities for a single syllable without context"
 msgstr "無上下文單字使用一元詞機率"
 
