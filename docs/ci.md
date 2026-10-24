@@ -26,9 +26,9 @@ Addon GLIBCXX / CXXABI limits come from the target container’s native C++ runt
 
 ## 依赖与模型 / Dependencies and models
 
-`ci/core-sdk.json` 固定 core 版本与 SDK 资产。目前依赖 `phono-core-sdk-0.1.1-linux-x86_64.tar.gz`。`tools/fetch_core_sdk.py` 将下载缓存保存在 `.sdk/downloads`，安装到 `.sdk/phono-core`，并检查 SDK 内的版本与固定版本一致。首次使用前，固定版本的 core Release 必须已发布对应 SDK。
+`ci/core-sdk.json` 固定 core 版本与 SDK 资产。目前依赖 `phono-core-sdk-0.1.2-linux-x86_64.tar.gz`。`tools/fetch_core_sdk.py` 将下载缓存保存在 `.sdk/downloads`，安装到 `.sdk/phono-core`，并检查 SDK 内的版本与固定版本一致。首次使用前，固定版本的 core Release 必须已发布对应 SDK。
 
-`ci/core-sdk.json` pins the core version and SDK asset. The current dependency is `phono-core-sdk-0.1.1-linux-x86_64.tar.gz`. `tools/fetch_core_sdk.py` caches downloads in `.sdk/downloads`, installs to `.sdk/phono-core`, and checks that the installed SDK version matches the pinned version. The pinned core Release must publish that SDK before first use.
+`ci/core-sdk.json` pins the core version and SDK asset. The current dependency is `phono-core-sdk-0.1.2-linux-x86_64.tar.gz`. `tools/fetch_core_sdk.py` caches downloads in `.sdk/downloads`, installs to `.sdk/phono-core`, and checks that the installed SDK version matches the pinned version. The pinned core Release must publish that SDK before first use.
 
 SDK 提供 `include/phono-core/phono_api.h`、`lib/libphono_core.so`、`lib/cmake/phono-core` 和 `share/licenses/phono-core`，CMake 目标为 `phono::core`。普通提交更新 `ci/core-sdk.json` 后运行前端验证；core 发布不会自动触发 addon 发布。
 
