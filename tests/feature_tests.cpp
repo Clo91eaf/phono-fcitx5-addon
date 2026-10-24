@@ -327,7 +327,8 @@ int main() {
             return true;
         });
         steps.push_back([&] {
-            if (real && state->beams.empty()) return false;
+            // A single syllable without context uses unigram candidates instead of model beams.
+            if (real && state->beams.empty() && state->unigramIndices.empty()) return false;
             auto list = ic.inputPanel().candidateList();
             std::vector<std::string> texts;
             do {
